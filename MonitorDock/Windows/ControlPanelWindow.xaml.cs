@@ -1,0 +1,206 @@
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using Microsoft.Win32;
+using MonitorDock.Models;
+using MonitorDock.Services;
+
+namespace MonitorDock.Windows;
+
+public class MonitorViewModel
+{
+    public string MonitorId { get; set; } = "";
+    public string DisplayName { get; set; } = "";
+    public ObservableCollection<PinnedApp> PinnedApps { get; set; } = new();
+}
+
+public partial class ControlPanelWindow : Window
+{
+    public AppConfig Config { get; private set; }
+    private readonly List<MonitorViewModel> _monitorViewModels = new();
+
+    public ControlPanelWindow(AppConfig config)
+    {
+        // Deep copy the config so cancel discards changes
+        Config = new AppConfig
+        {
+            DockHeight = config.DockHeight,
+            IconSize = config.IconSize,
+            ClickFocusedMinimizes = config.ClickFocusedMinimizes,
+            HideSecondaryTaskbars = config.HideSecondaryTaskbars,
+            StartWithWindows = config.StartWithWindows,
+            ShowOnPrimaryMonitor = config.ShowOnPrimaryMonitor,
+            Monitors = config.Monitors.Select(m => new MonitorPins
+            {
+                MonitorId = m.MonitorId,
+                MonitorName = m.MonitorName,
+                PinnedApps = m.PinnedApps.Select(a => new PinnedApp
+                {
+                    Name = a.Name,
+                    Path = a.Path,
+                    Arguments = a.Arguments
+                }).ToList()
+            }).ToList()
+        };
+
+        InitializeComponent();
+
+        BarHeightSlider.Value = Config.DockHeight;
+        BarHeightLabel.Text = $"{Config.DockHeight}px";
+        IconSizeSlider.Value = Config.IconSize;
+        IconSizeLabel.Text = $"{Config.IconSize}px";
+        ClickFocusedMinimizesCheck.IsChecked = Config.ClickFocusedMinimizes;
+        HideSecondaryTaskbarsCheck.IsChecked = Config.HideSecondaryTaskbars;
+        StartWithWindowsCheck.IsChecked = Config.StartWithWindows;
+        ShowOnPrimaryMonitorCheck.IsChecked = Config.ShowOnPrimaryMonitor;
+
+        LoadMonitors();
+    }
+
+    private void LoadMonitors()
+    {
+        var monitors = MonitorService.GetMonitors();
+        _monitorViewModels.Clear();
+
+        foreach (var monitor in monitors)
+        {
+            var existing = Config.Monitors.FirstOrDefault(m => m.MonitorId == monitor.Id);
+            var vm = new MonitorViewModel
+            {
+                MonitorId = monitor.Id,
+                DisplayName = monitor.IsPrimary ? $"{monitor.Name} (Primary)" : monitor.Name,
+                PinnedApps = new ObservableCollection<PinnedApp>(existing?.PinnedApps ?? new List<PinnedApp>())
+            };
+            _monitorViewModels.Add(vm);
+        }
+
+        MonitorList.ItemsSource = _monitorViewModels;
+        if (_monitorViewModels.Count > 0)
+            MonitorList.SelectedIndex = 0;
+    }
+
+    private void MonitorList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (MonitorList.SelectedItem is MonitorViewModel vm)
+        {
+            AppList.ItemsSource = vm.PinnedApps;
+        }
+    }
+
+    private void AddApp_Click(object sender, RoutedEventArgs e)
+    {
+        if (MonitorList.SelectedItem is not MonitorViewModel vm)
+        {
+            System.Windows.MessageBox.Show("Please select a monitor first.", "MonitorDock");
+            return;
+        }
+
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Select Application",
+            Filter = "Executables (*.exe)|*.exe|Shortcuts (*.lnk)|*.lnk|All files (*.*)|*.*",
+            Multiselect = true
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            foreach (var filePath in dialog.FileNames)
+            {
+                vm.PinnedApps.Add(new PinnedApp
+                {
+                    Name = Path.GetFileNameWithoutExtension(filePath),
+                    Path = filePath
+                });
+            }
+        }
+    }
+
+    private void RemoveApp_Click(object sender, RoutedEventArgs e)
+    {
+        if (MonitorList.SelectedItem is MonitorViewModel vm && AppList.SelectedItem is PinnedApp app)
+        {
+            vm.PinnedApps.Remove(app);
+        }
+    }
+
+    private void MoveUp_Click(object sender, RoutedEventArgs e)
+    {
+        if (MonitorList.SelectedItem is MonitorViewModel vm && AppList.SelectedItem is PinnedApp app)
+        {
+            int index = vm.PinnedApps.IndexOf(app);
+            if (index > 0)
+            {
+                vm.PinnedApps.Move(index, index - 1);
+                AppList.SelectedIndex = index - 1;
+            }
+        }
+    }
+
+    private void MoveDown_Click(object sender, RoutedEventArgs e)
+    {
+        if (MonitorList.SelectedItem is MonitorViewModel vm && AppList.SelectedItem is PinnedApp app)
+        {
+            int index = vm.PinnedApps.IndexOf(app);
+            if (index < vm.PinnedApps.Count - 1)
+            {
+                vm.PinnedApps.Move(index, index + 1);
+                AppList.SelectedIndex = index + 1;
+            }
+        }
+    }
+
+    private void Save_Click(object sender, RoutedEventArgs e)
+    {
+        Config.DockHeight = (int)BarHeightSlider.Value;
+        Config.IconSize = (int)IconSizeSlider.Value;
+        Config.ClickFocusedMinimizes = ClickFocusedMinimizesCheck.IsChecked == true;
+        Config.HideSecondaryTaskbars = HideSecondaryTaskbarsCheck.IsChecked == true;
+        Config.StartWithWindows = StartWithWindowsCheck.IsChecked == true;
+        Config.ShowOnPrimaryMonitor = ShowOnPrimaryMonitorCheck.IsChecked == true;
+        Config.Monitors = _monitorViewModels.Select(vm => new MonitorPins
+        {
+            MonitorId = vm.MonitorId,
+            MonitorName = vm.DisplayName,
+            PinnedApps = vm.PinnedApps.ToList()
+        }).ToList();
+
+        DialogResult = true;
+        Close();
+    }
+
+    private void Cancel_Click(object sender, RoutedEventArgs e)
+    {
+        DialogResult = false;
+        Close();
+    }
+
+    private void Restart_Click(object sender, RoutedEventArgs e)
+    {
+        var exePath = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exePath)) return;
+
+        DialogResult = false;
+        Close();
+
+        // Start new instance, then shut down current one
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = exePath,
+            UseShellExecute = true
+        });
+        System.Windows.Application.Current.Shutdown();
+    }
+
+    private void BarHeightSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (BarHeightLabel != null)
+            BarHeightLabel.Text = $"{(int)e.NewValue}px";
+    }
+
+    private void IconSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (IconSizeLabel != null)
+            IconSizeLabel.Text = $"{(int)e.NewValue}px";
+    }
+}

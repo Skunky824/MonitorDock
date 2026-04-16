@@ -1,0 +1,210 @@
+<Window x:Class="MonitorDock.Windows.DockWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:converters="clr-namespace:MonitorDock.Converters"
+        xmlns:local="clr-namespace:MonitorDock.Windows"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Background="Transparent">
+    <Window.Resources>
+        <converters:PathToIconConverter x:Key="IconConverter"/>
+
+        <!-- Shared button style for taskbar items -->
+        <Style x:Key="TaskbarButton" TargetType="Button">
+            <Setter Property="Width" Value="44"/>
+            <Setter Property="Margin" Value="1,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="Transparent"
+                                CornerRadius="4" Padding="6">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#25FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#40FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Running window button with active indicator -->
+        <Style x:Key="RunningAppButton" TargetType="Button">
+            <Setter Property="Margin" Value="1,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="44"/>
+            <Setter Property="MaxWidth" Value="200"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="border" Background="#18FFFFFF"
+                                    CornerRadius="4" Padding="6,4">
+                                <ContentPresenter HorizontalAlignment="Left"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                            <!-- Active underline indicator -->
+                            <Border x:Name="indicator" Height="3" VerticalAlignment="Bottom"
+                                    Background="#0078D4" CornerRadius="1.5"
+                                    HorizontalAlignment="Center" Width="20"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#30FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#45FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Focused window button — blue highlight -->
+        <Style x:Key="FocusedAppButton" TargetType="Button">
+            <Setter Property="Margin" Value="1,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="44"/>
+            <Setter Property="MaxWidth" Value="200"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="border" Background="#350078D4"
+                                    CornerRadius="4" Padding="6,4">
+                                <ContentPresenter HorizontalAlignment="Left"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                            <!-- Active underline indicator — wider for focused -->
+                            <Border Height="3" VerticalAlignment="Bottom"
+                                    Background="#0078D4" CornerRadius="1.5"
+                                    HorizontalAlignment="Stretch" Margin="6,0"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#500078D4"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#650078D4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Style selector converter -->
+        <local:FocusedStyleSelector x:Key="FocusedStyleSelector"
+            NormalStyle="{StaticResource RunningAppButton}"
+            FocusedStyle="{StaticResource FocusedAppButton}"/>
+    </Window.Resources>
+
+    <!-- Main taskbar container -->
+    <Border Background="#F0202020">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <!-- Pinned apps -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Separator -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Running windows -->
+                <ColumnDefinition Width="*"/>
+                <!-- Clock & settings -->
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Pinned apps section -->
+            <ItemsControl Grid.Column="0" ItemsSource="{Binding PinnedApps}"
+                          VerticalAlignment="Center" Margin="6,0,0,0">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Style="{StaticResource TaskbarButton}"
+                                ToolTip="{Binding Name}"
+                                Click="PinnedApp_Click" Tag="{Binding}">
+                            <Image Source="{Binding Path, Converter={StaticResource IconConverter}}"
+                                   Width="{Binding DataContext.PinnedIconSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                                   Height="{Binding DataContext.PinnedIconSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Separator -->
+            <Border Grid.Column="1" Width="1" Background="#30FFFFFF"
+                    Margin="6,8" VerticalAlignment="Stretch"/>
+
+            <!-- Running windows section -->
+            <ItemsControl Grid.Column="2" x:Name="RunningAppsPanel"
+                          ItemsSource="{Binding RunningWindows}"
+                          VerticalAlignment="Center" Margin="4,0"
+                          ClipToBounds="True"
+                          PreviewMouseMove="RunningApps_PreviewMouseMove"
+                          PreviewMouseLeftButtonUp="RunningApps_PreviewMouseLeftButtonUp">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Style="{Binding IsFocused, Converter={StaticResource FocusedStyleSelector}}"
+                                ToolTip="{Binding Title}"
+                                Click="RunningWindow_Click" Tag="{Binding}"
+                                PreviewMouseLeftButtonDown="RunningApp_PreviewMouseLeftButtonDown">
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Pin to taskbar" Click="PinToBar_Click"/>
+                                    <Separator/>
+                                    <MenuItem Header="Close window" Click="CloseApp_Click"/>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="{Binding Icon}"
+                                       Width="{Binding DataContext.RunningIconSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                                       Height="{Binding DataContext.RunningIconSize, RelativeSource={RelativeSource AncestorType=Window}}"
+                                       Margin="0,0,6,0"
+                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                <TextBlock Text="{Binding Title}" Foreground="#DDFFFFFF"
+                                           FontSize="12" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" MaxWidth="140"/>
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Right side: clock + settings -->
+            <StackPanel Grid.Column="3" Orientation="Horizontal"
+                        VerticalAlignment="Center" Margin="0,0,10,0">
+                <TextBlock x:Name="ClockText" Foreground="#CCFFFFFF" FontSize="12"
+                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <Button Style="{StaticResource TaskbarButton}"
+                        Content="&#x2699;" FontSize="14" Foreground="#99FFFFFF"
+                        Click="Settings_Click" ToolTip="Control Panel" Width="32"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
