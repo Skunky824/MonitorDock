@@ -2,7 +2,7 @@
 ; Download Inno Setup from https://jrsoftware.org/isinfo.php to compile this script
 
 #define MyAppName "MonitorDock"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "MonitorDock"
 #define MyAppExeName "MonitorDock.exe"
 #define MyAppURL "https://github.com/MonitorDock"
