@@ -33,6 +33,15 @@ public partial class App : Application
         };
 
         _config = ConfigService.Load();
+
+        // Sync startup setting with actual registry state (installer may have set it)
+        var registryEnabled = StartupService.IsEnabled();
+        if (_config.StartWithWindows != registryEnabled)
+        {
+            _config.StartWithWindows = registryEnabled;
+            ConfigService.Save(_config);
+        }
+
         CreateTrayIcon();
         RefreshDocks();
 

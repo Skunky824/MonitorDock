@@ -150,7 +150,7 @@ public partial class ControlPanelWindow : Window
         }
     }
 
-    private void Save_Click(object sender, RoutedEventArgs e)
+    private void ApplyUIToConfig()
     {
         Config.DockHeight = (int)BarHeightSlider.Value;
         Config.IconSize = (int)IconSizeSlider.Value;
@@ -164,7 +164,11 @@ public partial class ControlPanelWindow : Window
             MonitorName = vm.DisplayName,
             PinnedApps = vm.PinnedApps.ToList()
         }).ToList();
+    }
 
+    private void Save_Click(object sender, RoutedEventArgs e)
+    {
+        ApplyUIToConfig();
         DialogResult = true;
         Close();
     }
@@ -179,6 +183,10 @@ public partial class ControlPanelWindow : Window
     {
         var exePath = Environment.ProcessPath;
         if (string.IsNullOrEmpty(exePath)) return;
+
+        // Save current config to disk before restarting so the new instance picks it up
+        ApplyUIToConfig();
+        ConfigService.Save(Config);
 
         DialogResult = false;
         Close();

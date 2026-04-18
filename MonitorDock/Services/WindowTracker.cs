@@ -140,6 +140,37 @@ public static class WindowTracker
         PostMessage(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
     }
 
+    public static bool IsFullscreenWindowOnMonitor(MonitorInfo monitor)
+    {
+        var foreground = GetForegroundWindow();
+        if (foreground == IntPtr.Zero) return false;
+
+        // Skip tool windows, cloaked, and desktop/shell
+        int exStyle = GetWindowLong(foreground, GWL_EXSTYLE);
+        if ((exStyle & WS_EX_TOOLWINDOW) != 0) return false;
+        if (IsWindowCloaked(foreground)) return false;
+
+        // Check which monitor the foreground window is on
+        var hMonitor = MonitorFromWindow(foreground, MONITOR_DEFAULTTONEAREST);
+        var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        if (!GetMonitorInfo(hMonitor, ref mi)) return false;
+
+        var monitorRect = monitor.Bounds;
+        if (mi.rcMonitor.Left != monitorRect.Left ||
+            mi.rcMonitor.Top != monitorRect.Top ||
+            mi.rcMonitor.Right != monitorRect.Right ||
+            mi.rcMonitor.Bottom != monitorRect.Bottom)
+            return false;
+
+        // Get the window rect and check if it covers the full monitor
+        if (!GetWindowRect(foreground, out RECT windowRect)) return false;
+
+        return windowRect.Left <= mi.rcMonitor.Left &&
+               windowRect.Top <= mi.rcMonitor.Top &&
+               windowRect.Right >= mi.rcMonitor.Right &&
+               windowRect.Bottom >= mi.rcMonitor.Bottom;
+    }
+
     private static string GetWindowTitle(IntPtr hwnd)
     {
         int len = GetWindowTextLength(hwnd);
@@ -184,6 +215,7 @@ public static class WindowTracker
     [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
     [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
     [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hwnd, uint Msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RECT lpRect);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
 
     [StructLayout(LayoutKind.Sequential)]

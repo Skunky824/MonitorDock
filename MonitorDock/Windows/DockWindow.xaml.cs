@@ -18,6 +18,7 @@ public partial class DockWindow : Window, INotifyPropertyChanged
     private readonly DispatcherTimer _refreshTimer;
     private readonly DispatcherTimer _clockTimer;
     private bool _appBarRegistered;
+    private bool _isHiddenForFullscreen;
     private readonly int _taskbarHeight;
     private readonly bool _clickFocusedMinimizes;
     private System.Windows.Point _dragStartPoint;
@@ -64,7 +65,7 @@ public partial class DockWindow : Window, INotifyPropertyChanged
         InitializeComponent();
 
         _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-        _refreshTimer.Tick += (s, e) => RefreshRunningWindows();
+        _refreshTimer.Tick += (s, e) => OnRefreshTick();
 
         _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _clockTimer.Tick += (s, e) => UpdateClock();
@@ -182,6 +183,31 @@ public partial class DockWindow : Window, INotifyPropertyChanged
         var hwnd = new WindowInteropHelper(this).Handle;
         var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
         SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+    }
+
+    private void OnRefreshTick()
+    {
+        bool fullscreen = WindowTracker.IsFullscreenWindowOnMonitor(_monitor);
+
+        if (fullscreen && !_isHiddenForFullscreen)
+        {
+            _isHiddenForFullscreen = true;
+            UnregisterAppBar();
+            Hide();
+            return;
+        }
+
+        if (!fullscreen && _isHiddenForFullscreen)
+        {
+            _isHiddenForFullscreen = false;
+            Show();
+            RegisterAppBar();
+            PositionAsTaskbar();
+        }
+
+        if (_isHiddenForFullscreen) return;
+
+        RefreshRunningWindows();
     }
 
     private void RefreshRunningWindows()
