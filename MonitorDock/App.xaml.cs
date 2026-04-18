@@ -1,4 +1,5 @@
-﻿using System.Drawing;
+﻿using System.Diagnostics;
+using System.Drawing;
 using System.Windows;
 using MonitorDock.Models;
 using MonitorDock.Services;
@@ -21,6 +22,9 @@ public partial class App : Application
     {
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        // Kill any other running instances to avoid duplicate docks
+        KillOtherInstances();
 
         DispatcherUnhandledException += (s, ex) =>
         {
@@ -49,7 +53,7 @@ public partial class App : Application
             TaskbarHider.HideSecondaryTaskbars();
 
         _originalAutoHideState = TaskbarHider.IsPrimaryTaskbarAutoHide();
-        if (_config.ShowOnPrimaryMonitor)
+        if (IsPrimaryMonitorEnabled())
             TaskbarHider.SetPrimaryTaskbarAutoHide(true);
 
         _taskbarFilter = new TaskbarFilter();
@@ -84,10 +88,10 @@ public partial class App : Application
 
         foreach (var monitor in monitors)
         {
-            // Skip primary monitor unless ShowOnPrimaryMonitor is enabled
-            if (monitor.IsPrimary && !_config.ShowOnPrimaryMonitor) continue;
-
+            // Check if this monitor is enabled in config (default: enabled)
             var monitorPins = _config.Monitors.FirstOrDefault(m => m.MonitorId == monitor.Id);
+            if (monitorPins != null && !monitorPins.Enabled) continue;
+
             var pinnedApps = monitorPins?.PinnedApps ?? new List<PinnedApp>();
 
             var dock = new DockWindow(monitor, pinnedApps, _config.DockHeight, _config.IconSize, _config.ClickFocusedMinimizes);
@@ -143,7 +147,7 @@ public partial class App : Application
                 TaskbarHider.ShowSecondaryTaskbars();
 
             // Apply primary taskbar auto-hide
-            if (_config.ShowOnPrimaryMonitor)
+            if (IsPrimaryMonitorEnabled())
                 TaskbarHider.SetPrimaryTaskbarAutoHide(true);
             else
                 TaskbarHider.SetPrimaryTaskbarAutoHide(_originalAutoHideState);
@@ -158,7 +162,7 @@ public partial class App : Application
     {
         _taskbarFilter?.Dispose();
         TaskbarHider.ShowSecondaryTaskbars();
-        if (_config.ShowOnPrimaryMonitor)
+        if (IsPrimaryMonitorEnabled())
             TaskbarHider.SetPrimaryTaskbarAutoHide(_originalAutoHideState);
 
         foreach (var dock in _dockWindows)
@@ -177,7 +181,7 @@ public partial class App : Application
     {
         _taskbarFilter?.Dispose();
         TaskbarHider.ShowSecondaryTaskbars();
-        if (_config.ShowOnPrimaryMonitor)
+        if (IsPrimaryMonitorEnabled())
             TaskbarHider.SetPrimaryTaskbarAutoHide(_originalAutoHideState);
 
         if (_trayIcon != null)
@@ -186,6 +190,29 @@ public partial class App : Application
             _trayIcon.Dispose();
         }
         base.OnExit(e);
+    }
+
+    private bool IsPrimaryMonitorEnabled()
+    {
+        var primaryId = MonitorService.GetMonitors().FirstOrDefault(m => m.IsPrimary)?.Id;
+        if (primaryId == null) return false;
+        var pins = _config.Monitors.FirstOrDefault(m => m.MonitorId == primaryId);
+        return pins?.Enabled ?? false;
+    }
+
+    private static void KillOtherInstances()
+    {
+        var currentId = Environment.ProcessId;
+        var currentName = Process.GetCurrentProcess().ProcessName;
+
+        foreach (var proc in Process.GetProcessesByName(currentName))
+        {
+            if (proc.Id != currentId)
+            {
+                try { proc.Kill(); } catch { }
+            }
+            proc.Dispose();
+        }
     }
 }
 

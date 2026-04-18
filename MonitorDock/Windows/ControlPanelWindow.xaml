@@ -26,9 +26,19 @@
 
             <!-- Monitor list -->
             <GroupBox Header="Monitors" Grid.Column="0" Margin="0,0,6,0">
-                <ListBox x:Name="MonitorList"
-                         SelectionChanged="MonitorList_SelectionChanged"
-                         DisplayMemberPath="DisplayName"/>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <ListBox x:Name="MonitorList" Grid.Row="0"
+                             SelectionChanged="MonitorList_SelectionChanged"
+                             DisplayMemberPath="DisplayName"/>
+                    <CheckBox x:Name="MonitorEnabledCheck" Grid.Row="1" Margin="4,8,0,0"
+                              Content="Enable dock on this monitor"
+                              Checked="MonitorEnabledCheck_Changed"
+                              Unchecked="MonitorEnabledCheck_Changed"/>
+                </Grid>
             </GroupBox>
 
             <!-- Pinned apps for selected monitor -->
@@ -112,8 +122,6 @@
                           Content="Hide Windows taskbar on secondary monitors"/>
                 <CheckBox x:Name="StartWithWindowsCheck" Margin="0,6,0,0"
                           Content="Start MonitorDock with Windows"/>
-                <CheckBox x:Name="ShowOnPrimaryMonitorCheck" Margin="0,6,0,0"
-                          Content="Show dock on primary monitor (auto-hide Windows taskbar)"/>
             </StackPanel>
         </GroupBox>
 

@@ -12,6 +12,8 @@ public class MonitorViewModel
 {
     public string MonitorId { get; set; } = "";
     public string DisplayName { get; set; } = "";
+    public bool IsPrimary { get; set; }
+    public bool Enabled { get; set; } = true;
     public ObservableCollection<PinnedApp> PinnedApps { get; set; } = new();
 }
 
@@ -30,11 +32,11 @@ public partial class ControlPanelWindow : Window
             ClickFocusedMinimizes = config.ClickFocusedMinimizes,
             HideSecondaryTaskbars = config.HideSecondaryTaskbars,
             StartWithWindows = config.StartWithWindows,
-            ShowOnPrimaryMonitor = config.ShowOnPrimaryMonitor,
             Monitors = config.Monitors.Select(m => new MonitorPins
             {
                 MonitorId = m.MonitorId,
                 MonitorName = m.MonitorName,
+                Enabled = m.Enabled,
                 PinnedApps = m.PinnedApps.Select(a => new PinnedApp
                 {
                     Name = a.Name,
@@ -53,7 +55,6 @@ public partial class ControlPanelWindow : Window
         ClickFocusedMinimizesCheck.IsChecked = Config.ClickFocusedMinimizes;
         HideSecondaryTaskbarsCheck.IsChecked = Config.HideSecondaryTaskbars;
         StartWithWindowsCheck.IsChecked = Config.StartWithWindows;
-        ShowOnPrimaryMonitorCheck.IsChecked = Config.ShowOnPrimaryMonitor;
 
         LoadMonitors();
     }
@@ -70,6 +71,8 @@ public partial class ControlPanelWindow : Window
             {
                 MonitorId = monitor.Id,
                 DisplayName = monitor.IsPrimary ? $"{monitor.Name} (Primary)" : monitor.Name,
+                IsPrimary = monitor.IsPrimary,
+                Enabled = existing?.Enabled ?? true,
                 PinnedApps = new ObservableCollection<PinnedApp>(existing?.PinnedApps ?? new List<PinnedApp>())
             };
             _monitorViewModels.Add(vm);
@@ -85,6 +88,15 @@ public partial class ControlPanelWindow : Window
         if (MonitorList.SelectedItem is MonitorViewModel vm)
         {
             AppList.ItemsSource = vm.PinnedApps;
+            MonitorEnabledCheck.IsChecked = vm.Enabled;
+        }
+    }
+
+    private void MonitorEnabledCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (MonitorList.SelectedItem is MonitorViewModel vm)
+        {
+            vm.Enabled = MonitorEnabledCheck.IsChecked == true;
         }
     }
 
@@ -157,11 +169,11 @@ public partial class ControlPanelWindow : Window
         Config.ClickFocusedMinimizes = ClickFocusedMinimizesCheck.IsChecked == true;
         Config.HideSecondaryTaskbars = HideSecondaryTaskbarsCheck.IsChecked == true;
         Config.StartWithWindows = StartWithWindowsCheck.IsChecked == true;
-        Config.ShowOnPrimaryMonitor = ShowOnPrimaryMonitorCheck.IsChecked == true;
         Config.Monitors = _monitorViewModels.Select(vm => new MonitorPins
         {
             MonitorId = vm.MonitorId,
             MonitorName = vm.DisplayName,
+            Enabled = vm.Enabled,
             PinnedApps = vm.PinnedApps.ToList()
         }).ToList();
     }
