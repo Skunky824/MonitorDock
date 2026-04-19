@@ -11,9 +11,12 @@ namespace MonitorDock.Windows;
 public class MonitorViewModel
 {
     public string MonitorId { get; set; } = "";
+    public string DeviceName { get; set; } = "";
     public string DisplayName { get; set; } = "";
     public bool IsPrimary { get; set; }
     public bool Enabled { get; set; } = true;
+    public int BoundsWidth { get; set; }
+    public int BoundsHeight { get; set; }
     public ObservableCollection<PinnedApp> PinnedApps { get; set; } = new();
 }
 
@@ -35,8 +38,12 @@ public partial class ControlPanelWindow : Window
             Monitors = config.Monitors.Select(m => new MonitorPins
             {
                 MonitorId = m.MonitorId,
+                DeviceName = m.DeviceName,
                 MonitorName = m.MonitorName,
                 Enabled = m.Enabled,
+                IsPrimary = m.IsPrimary,
+                BoundsWidth = m.BoundsWidth,
+                BoundsHeight = m.BoundsHeight,
                 PinnedApps = m.PinnedApps.Select(a => new PinnedApp
                 {
                     Name = a.Name,
@@ -66,13 +73,18 @@ public partial class ControlPanelWindow : Window
 
         foreach (var monitor in monitors)
         {
-            var existing = Config.Monitors.FirstOrDefault(m => m.MonitorId == monitor.Id);
+            var existing = Config.Monitors.FirstOrDefault(m => m.MonitorId == monitor.Id)
+                ?? Config.Monitors.FirstOrDefault(m => !string.IsNullOrEmpty(m.DeviceName) && m.DeviceName == monitor.DeviceName)
+                ?? Config.Monitors.FirstOrDefault(m => m.MonitorId.StartsWith(@"\\.\") && m.MonitorId == monitor.DeviceName);
             var vm = new MonitorViewModel
             {
                 MonitorId = monitor.Id,
+                DeviceName = monitor.DeviceName,
                 DisplayName = monitor.IsPrimary ? $"{monitor.Name} (Primary)" : monitor.Name,
                 IsPrimary = monitor.IsPrimary,
                 Enabled = existing?.Enabled ?? true,
+                BoundsWidth = monitor.Bounds.Width,
+                BoundsHeight = monitor.Bounds.Height,
                 PinnedApps = new ObservableCollection<PinnedApp>(existing?.PinnedApps ?? new List<PinnedApp>())
             };
             _monitorViewModels.Add(vm);
@@ -169,13 +181,25 @@ public partial class ControlPanelWindow : Window
         Config.ClickFocusedMinimizes = ClickFocusedMinimizesCheck.IsChecked == true;
         Config.HideSecondaryTaskbars = HideSecondaryTaskbarsCheck.IsChecked == true;
         Config.StartWithWindows = StartWithWindowsCheck.IsChecked == true;
-        Config.Monitors = _monitorViewModels.Select(vm => new MonitorPins
+        // Build list from current monitors
+        var currentMonitors = _monitorViewModels.Select(vm => new MonitorPins
         {
             MonitorId = vm.MonitorId,
+            DeviceName = vm.DeviceName,
             MonitorName = vm.DisplayName,
             Enabled = vm.Enabled,
+            IsPrimary = vm.IsPrimary,
+            BoundsWidth = vm.BoundsWidth,
+            BoundsHeight = vm.BoundsHeight,
             PinnedApps = vm.PinnedApps.ToList()
         }).ToList();
+
+        // Preserve orphaned configs (disconnected monitors) so their pinned apps aren't lost
+        var currentIds = new HashSet<string>(currentMonitors.Select(m => m.MonitorId));
+        var orphaned = Config.Monitors.Where(m =>
+            !currentIds.Contains(m.MonitorId) && m.PinnedApps.Count > 0).ToList();
+
+        Config.Monitors = currentMonitors.Concat(orphaned).ToList();
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)

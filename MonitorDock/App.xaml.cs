@@ -37,6 +37,7 @@ public partial class App : Application
         };
 
         _config = ConfigService.Load();
+        MigrateMonitorIds();
 
         // Sync startup setting with actual registry state (installer may have set it)
         var registryEnabled = StartupService.IsEnabled();
@@ -88,8 +89,9 @@ public partial class App : Application
 
         foreach (var monitor in monitors)
         {
+            var monitorPins = FindMonitorPins(monitor);
+
             // Check if this monitor is enabled in config (default: enabled)
-            var monitorPins = _config.Monitors.FirstOrDefault(m => m.MonitorId == monitor.Id);
             if (monitorPins != null && !monitorPins.Enabled) continue;
 
             var pinnedApps = monitorPins?.PinnedApps ?? new List<PinnedApp>();
@@ -100,6 +102,78 @@ public partial class App : Application
             dock.Show();
             _dockWindows.Add(dock);
         }
+
+        // Update stored monitor metadata for future matching
+        UpdateMonitorMetadata(monitors);
+    }
+
+    /// <summary>
+    /// Finds the saved MonitorPins for a monitor using multi-level fallback:
+    /// 1. Exact match on MonitorId (EDID-based, stable)
+    /// 2. Match on legacy DeviceName (\\.\DISPLAY1)
+    /// 3. Match on resolution + primary status
+    /// </summary>
+    private MonitorPins? FindMonitorPins(MonitorInfo monitor)
+    {
+        // Level 1: Exact ID match (new EDID-based ID)
+        var match = _config.Monitors.FirstOrDefault(m => m.MonitorId == monitor.Id);
+        if (match != null) return match;
+
+        // Level 2: Match by DeviceName (legacy or current)
+        match = _config.Monitors.FirstOrDefault(m =>
+            !string.IsNullOrEmpty(m.DeviceName) && m.DeviceName == monitor.DeviceName);
+        if (match != null)
+        {
+            match.MonitorId = monitor.Id; // migrate to new ID
+            return match;
+        }
+
+        // Level 3: Match by old MonitorId that looks like a DeviceName (migration from old format)
+        match = _config.Monitors.FirstOrDefault(m =>
+            m.MonitorId.StartsWith(@"\\.\") && m.MonitorId == monitor.DeviceName);
+        if (match != null)
+        {
+            match.MonitorId = monitor.Id; // migrate to new ID
+            return match;
+        }
+
+        // Level 4: Match by resolution + primary status (for when all IDs changed)
+        match = _config.Monitors.FirstOrDefault(m =>
+            m.BoundsWidth == monitor.Bounds.Width &&
+            m.BoundsHeight == monitor.Bounds.Height &&
+            m.IsPrimary == monitor.IsPrimary &&
+            m.PinnedApps.Count > 0);
+        if (match != null)
+        {
+            match.MonitorId = monitor.Id; // adopt this monitor
+            return match;
+        }
+
+        return null;
+    }
+
+    private void UpdateMonitorMetadata(List<MonitorInfo> monitors)
+    {
+        bool changed = false;
+        foreach (var monitor in monitors)
+        {
+            var pins = _config.Monitors.FirstOrDefault(m => m.MonitorId == monitor.Id);
+            if (pins != null)
+            {
+                if (pins.DeviceName != monitor.DeviceName ||
+                    pins.BoundsWidth != monitor.Bounds.Width ||
+                    pins.BoundsHeight != monitor.Bounds.Height ||
+                    pins.IsPrimary != monitor.IsPrimary)
+                {
+                    pins.DeviceName = monitor.DeviceName;
+                    pins.BoundsWidth = monitor.Bounds.Width;
+                    pins.BoundsHeight = monitor.Bounds.Height;
+                    pins.IsPrimary = monitor.IsPrimary;
+                    changed = true;
+                }
+            }
+        }
+        if (changed) ConfigService.Save(_config);
     }
 
     private void PinAppToMonitor(string monitorId, string monitorName, string exePath, string name)
@@ -107,7 +181,16 @@ public partial class App : Application
         var monitorPins = _config.Monitors.FirstOrDefault(m => m.MonitorId == monitorId);
         if (monitorPins == null)
         {
-            monitorPins = new MonitorPins { MonitorId = monitorId, MonitorName = monitorName };
+            var monitor = MonitorService.GetMonitors().FirstOrDefault(m => m.Id == monitorId);
+            monitorPins = new MonitorPins
+            {
+                MonitorId = monitorId,
+                MonitorName = monitorName,
+                DeviceName = monitor?.DeviceName ?? "",
+                IsPrimary = monitor?.IsPrimary ?? false,
+                BoundsWidth = monitor?.Bounds.Width ?? 0,
+                BoundsHeight = monitor?.Bounds.Height ?? 0
+            };
             _config.Monitors.Add(monitorPins);
         }
 
@@ -198,6 +281,52 @@ public partial class App : Application
         if (primaryId == null) return false;
         var pins = _config.Monitors.FirstOrDefault(m => m.MonitorId == primaryId);
         return pins?.Enabled ?? false;
+    }
+
+    /// <summary>
+    /// Migrates old DeviceName-based MonitorIds (\\.\DISPLAY1) to EDID-based IDs.
+    /// Also populates DeviceName field if empty (upgrade from older config format).
+    /// </summary>
+    private void MigrateMonitorIds()
+    {
+        if (_config.Monitors.Count == 0) return;
+
+        var monitors = MonitorService.GetMonitors();
+        bool changed = false;
+
+        foreach (var pins in _config.Monitors)
+        {
+            // Old format used DeviceName as MonitorId — migrate if we find a matching current monitor
+            if (pins.MonitorId.StartsWith(@"\\.\"))
+            {
+                var monitor = monitors.FirstOrDefault(m => m.DeviceName == pins.MonitorId);
+                if (monitor != null)
+                {
+                    pins.DeviceName = pins.MonitorId;
+                    pins.MonitorId = monitor.Id;
+                    pins.IsPrimary = monitor.IsPrimary;
+                    pins.BoundsWidth = monitor.Bounds.Width;
+                    pins.BoundsHeight = monitor.Bounds.Height;
+                    changed = true;
+                }
+            }
+
+            // Populate DeviceName if missing (older config versions)
+            if (string.IsNullOrEmpty(pins.DeviceName))
+            {
+                var monitor = monitors.FirstOrDefault(m => m.Id == pins.MonitorId);
+                if (monitor != null)
+                {
+                    pins.DeviceName = monitor.DeviceName;
+                    pins.IsPrimary = monitor.IsPrimary;
+                    pins.BoundsWidth = monitor.Bounds.Width;
+                    pins.BoundsHeight = monitor.Bounds.Height;
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed) ConfigService.Save(_config);
     }
 
     private static void KillOtherInstances()

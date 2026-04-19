@@ -3,8 +3,12 @@ namespace MonitorDock.Models;
 public class MonitorPins
 {
     public string MonitorId { get; set; } = "";
+    public string DeviceName { get; set; } = "";
     public string MonitorName { get; set; } = "";
     public bool Enabled { get; set; } = true;
+    public bool IsPrimary { get; set; }
+    public int BoundsWidth { get; set; }
+    public int BoundsHeight { get; set; }
     public List<PinnedApp> PinnedApps { get; set; } = new();
 }
 
